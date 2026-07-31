@@ -58,7 +58,7 @@ void updateOLEDDisplay() {
   // Header
   display.setTextSize(1);
   display.setCursor(0, 0);
-  display.println("--- SENSOR DATA ---");
+  display.println("--- SENSOR COAP ---");
   
   // Data Suhu (Dinaikkan ke Y=14 dan posisi rapat kiri)
   display.setTextSize(2);

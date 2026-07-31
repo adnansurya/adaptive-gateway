@@ -20,17 +20,17 @@
 // Konfigurasi Layar OLED (128x64 pixel)
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
-#define OLED_RESET    -1 
-#define SCREEN_ADDRESS 0x3C 
+#define OLED_RESET -1
+#define SCREEN_ADDRESS 0x3C
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // Hostname mDNS Raspberry Pi Gateway (tanpa .local)
-const char* targetHostname = "mksrobotics"; 
-IPAddress ipGateway(0, 0, 0, 0); // Akan diisi otomatis oleh mDNS
+const char* targetHostname = "mksrobotics";
+IPAddress ipGateway(0, 0, 0, 0);  // Akan diisi otomatis oleh mDNS
 const int portMQTT = 1883;
 
 // Config Sensor PIN
-#define PIR_PIN   D4  // Sensor PIR di pin D4 (GPIO2)
+#define PIR_PIN D4    // Sensor PIR di pin D4 (GPIO2)
 #define MQ135_PIN A0  // Sensor MQ135 di pin Analog A0
 
 // MQTT Setup
@@ -38,7 +38,7 @@ WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
 unsigned long previousMillis = 0;
-const long interval = 5000; // Kirim data setiap 5 detik
+const long interval = 5000;  // Kirim data setiap 5 detik
 
 // Variabel Status MQTT ("IDLE", "CONNECTING", "OK", "ERR")
 String mqttStatus = "IDLE";
@@ -46,39 +46,79 @@ String mqttStatus = "IDLE";
 // Variabel Sensor Global untuk Tampilan OLED
 bool globalAdaGerakan = false;
 int globalMq135Raw = 0;
+float globalPPM = 0.0;
 
-// Fungsi terpusat menggambar tampilan OLED beserta simbol indikator status di kanan bawah
+// Fungsi untuk mengonversi nilai Raw ADC ke PPM (Estimasi CO2)
+float hitungPPM(int rawADC) {
+  // Mencegah nilai 0 agar tidak terjadi devide by zero
+  if (rawADC <= 0) rawADC = 1;
+
+  // 1. Konversi ADC ke Tegangan (ESP8266 Max 3.3V)
+  float voltase = rawADC * (3.3 / 1023.0);
+
+  // 2. Hitung Resistansi Sensor (Rs)
+  // Catatan: Jika modul MQ135 menggunakan beban Resistor RL = 10k Ohm
+  float RS_gas = (3.3 - voltase) / voltase;
+
+  // 3. Nilai R0 standar udara bersih (sekitar 3.6 - 4.0 untuk MQ-135)
+  float R0 = 3.6;
+
+  // 4. Hitung Ratio Rs/R0
+  float ratio = RS_gas / R0;
+
+  // 5. Hitung PPM CO2 menggunakan rumus kurva logaritmik MQ-135
+  // Rumus: PPM = 110.47 * (ratio ^ -2.862)
+  float ppm = 110.47 * pow(ratio, -2.862);
+
+  // Batasi rentang bacaan ideal sensor MQ-135 (400 - 2000 PPM)
+  if (ppm < 400.0) ppm = 400.0;
+  if (ppm > 9999.0) ppm = 9999.0;
+
+  return ppm;
+}
+
+// Fungsi Tampilan OLED Terintegrasi PPM
 void updateOLEDDisplay() {
   display.clearDisplay();
-  
+
   // Header
   display.setTextSize(1);
   display.setCursor(0, 0);
   display.println("--- SENSOR MQTT ---");
-  
-  // Tampilan Sensor PIR (Posisi Y=16)
-  display.setCursor(0, 16);
-  display.print("Gerakan : ");
-  display.println(globalAdaGerakan ? "ADA" : "CLEAR");
 
-  // Tampilan Sensor MQ135 (Posisi Y=34)
-  display.setCursor(0, 34);
-  display.print("MQ135   : ");
-  display.print(globalMq135Raw);
+  // 1. Status Sensor PIR (Posisi Y = 14)
+  display.setTextSize(1);
+  display.setCursor(0, 14);
+  display.print("Gerakan : ");
+  display.println(globalAdaGerakan ? "ADA" : "TIDAK ADA");
+
+  // 2. Data Kualitas Udara PPM (Posisi Y = 28)
+  display.setCursor(0, 28);
+  display.print("Polusi  : ");
+  display.print((int)globalPPM);  // Menampilkan angka PPM
   display.println(" PPM");
 
-  // INDIKATOR STATUS SIMBOL VISUAL MQTT (Pojok Kanan Bawah: X=96, Y=54)
-  display.setTextSize(1);
-  display.setCursor(96, 54);
+  // // 3. Kategori / Indikator Udara (Posisi Y = 42)
+  // display.setCursor(0, 42);
+  // display.print("Status  : ");
+  // if (globalPPM < 800) {
+  //   display.println("BAIK");
+  // } else if (globalPPM < 1200) {
+  //   display.println("SEDANG");
+  // } else {
+  //   display.println("BURUK");
+  // }
 
+  // 4. Indikator Status MQTT (Pojok Kanan Bawah: X=96, Y=54)
+  display.setCursor(96, 54);
   if (mqttStatus == "CONNECTING") {
-    display.print("[..]");  // Memproses koneksi / Mengirim
+    display.print("[..]");
   } else if (mqttStatus == "OK") {
-    display.print("[OK]");  // Terhubung & Publish Sukses
+    display.print("[OK]");
   } else if (mqttStatus == "ERR") {
-    display.print("[ERR]"); // Gagal / Terputus dari Broker
+    display.print("[ERR]");
   } else {
-    display.print("    ");   // Idle
+    display.print("    ");
   }
 
   display.display();
@@ -103,7 +143,7 @@ void findGatewayIP() {
     int result = WiFi.hostByName(fullHostname.c_str(), ipGateway);
 
     if (result == 1 && ipGateway != IPAddress(0, 0, 0, 0)) {
-      break; // IP Berhasil Ditemukan!
+      break;  // IP Berhasil Ditemukan!
     } else {
       Serial.println("Gateway belum ditemukan, mencoba lagi...");
       ipGateway = IPAddress(0, 0, 0, 0);
@@ -134,7 +174,7 @@ void reconnectMQTT() {
     Serial.println("...");
 
     String clientId = "ESP8266Client-" + String(random(0xffff), HEX);
-    
+
     if (mqttClient.connect(clientId.c_str())) {
       Serial.println("MQTT Terhubung!");
       mqttStatus = "OK";
@@ -143,7 +183,7 @@ void reconnectMQTT() {
       Serial.print("Gagal terhubung, rc=");
       Serial.print(mqttClient.state());
       Serial.println(" mencoba lagi dalam 5 detik...");
-      
+
       mqttStatus = "ERR";
       updateOLEDDisplay();
       delay(5000);
@@ -178,7 +218,7 @@ void setupOTA() {
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
     int percent = (progress / (total / 100));
     Serial.printf("Progress: %u%%\r", percent);
-    
+
     display.clearDisplay();
     display.setTextSize(1);
     display.setCursor(0, 0);
@@ -204,7 +244,7 @@ void setup() {
   pinMode(PIR_PIN, INPUT);
 
   // Inisialisasi Layar OLED
-  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("Gagal menginisialisasi OLED SSD1306!"));
   } else {
     display.clearDisplay();
@@ -238,7 +278,7 @@ void setup() {
     display.println("Gagal Wi-Fi!");
     display.println("Restarting...");
     display.display();
-    
+
     ESP.restart();
     delay(1000);
   }
@@ -285,15 +325,20 @@ void loop() {
     previousMillis = currentMillis;
 
     // Pembacaan Sensor
-    int pirState = digitalRead(PIR_PIN); 
-    int mq135Raw = analogRead(MQ135_PIN); 
+    int pirState = digitalRead(PIR_PIN);
+    int mq135Raw = analogRead(MQ135_PIN);
 
     globalAdaGerakan = (pirState == HIGH);
-    globalMq135Raw = mq135Raw;
+
+    // --- Hitung Nilai PPM dari ADC Raw ---
+    globalPPM = mq135Raw;
+
+    // Update Tampilan OLED
+    updateOLEDDisplay();
 
     // Prepare Publish Payloads
     String pirPayload = globalAdaGerakan ? "true" : "false";
-    String mqPayload = String(mq135Raw);
+    String mqPayload = String(globalPPM, 1);  // Kirim presisi 1 desimal
 
     // Kirim Data MQTT
     bool pub1 = mqttClient.publish("node/pir", pirPayload.c_str());
