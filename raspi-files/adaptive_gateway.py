@@ -19,6 +19,9 @@ logging.getLogger("coap-server").setLevel(logging.WARNING)
 TELEGRAM_BOT_TOKEN = "8236898914:AAHnrf84yJwaXhTM3gkzV8zv_xJ32cYnFQ8"
 TELEGRAM_CHAT_ID = "108488036"
 
+# Variable pelacak status koneksi Cloud (mencegah pesan spam jika disconnect berulang)
+is_cloud_connected = False
+
 # ==================== KONFIGURASI MQTT BROKER UTAMA (CLOUD) ====================
 MQTT_DEST_BROKER = "2d3014c691e840d98b7e4292008d7f8c.s1.eu.hivemq.cloud"
 MQTT_DEST_PORT = 8883
@@ -34,26 +37,27 @@ MQTT_SRC_TOPICS = [("node/pir", 0), ("node/mq135", 0)]
 
 
 # --- FUNGSI PENGIRIMAN TELEGRAM ---
-async def send_telegram_notification(message):
+def send_telegram_sync(message):
+    """Pengiriman synchronous yang dipanggil dari thread paho MQTT / asyncio."""
     if TELEGRAM_BOT_TOKEN == "GANTI_DENGAN_TOKEN_BOT_ANDA":
         return
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = urllib.parse.urlencode({
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message,
+            "parse_mode": "Markdown"
+        }).encode('utf-8')
+        
+        req = urllib.request.Request(url, data=payload)
+        with urllib.request.urlopen(req, timeout=10) as response:
+            pass
+    except Exception as e:
+        print(f"[Telegram Error] Gagal mengirim pesan: {e}")
 
-    def _send():
-        try:
-            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-            payload = urllib.parse.urlencode({
-                "chat_id": TELEGRAM_CHAT_ID,
-                "text": message,
-                "parse_mode": "Markdown"
-            }).encode('utf-8')
-            
-            req = urllib.request.Request(url, data=payload)
-            with urllib.request.urlopen(req, timeout=10) as response:
-                pass
-        except Exception as e:
-            print(f"[Telegram Error] Gagal mengirim pesan: {e}")
-
-    await asyncio.to_thread(_send)
+async def send_telegram_notification(message):
+    """Wrapper Asynchronous untuk pengiriman dari asyncio loop."""
+    await asyncio.to_thread(send_telegram_sync, message)
 
 
 class DataStore:
@@ -105,7 +109,6 @@ class DataStore:
 
 store = DataStore()
 
-# Memakai Client ID acak agar tidak bentrok koneksi
 client_random_id = f"AdaptiveGateway_Pub_{random.randint(1000, 9999)}"
 mqtt_pub_client = mqtt.Client(
     callback_api_version=mqtt.CallbackAPIVersion.VERSION2, 
@@ -113,14 +116,43 @@ mqtt_pub_client = mqtt.Client(
 )
 
 
-# ==================== CALLBACKS ====================
+# ==================== CALLBACKS (STATUS KONEKSI CLOUD) ====================
 def on_dest_connect(client, userdata, flags, rc, properties=None):
+    global is_cloud_connected
     if rc == 0:
         print("\n[Cloud MQTT Success] Terhubung KE HIVEMQ CLOUD!\n")
+        
+        # Kirim Notifikasi jika sebelumnya dalam posisi disconnected/terputus
+        if not is_cloud_connected:
+            is_cloud_connected = True
+            msg = (
+                f"✅ *CLOUD MQTT CONNECTED*\n"
+                f"----------------------------------------\n"
+                f"• *Broker:* `{MQTT_DEST_BROKER}`\n"
+                f"• *Status:* Koneksi ke HiveMQ Cloud *BERHASIL*\n"
+                f"• *Waktu:* `{time.strftime('%Y-%m-%d %H:%M:%S')}`"
+            )
+            send_telegram_sync(msg)
     else:
         print(f"\n[Cloud MQTT Error] Gagal terhubung ke HiveMQ Cloud! Reason/Code: {rc}")
-        if str(rc) in ["Not authorized", "5", "Bad username or password"]:
-            print(" -> PERIKSA USERNAME & PASSWORD DI HIVEMQ CLOUD CONSOLE!")
+
+
+def on_dest_disconnect(client, userdata, flags, rc, properties=None):
+    global is_cloud_connected
+    print(f"\n[Cloud MQTT Warning] Terputus dari HiveMQ Cloud! Reason Code: {rc}\n")
+    
+    # Kirim Notifikasi jika sebelumnya terhubung lalu terputus
+    if is_cloud_connected:
+        is_cloud_connected = False
+        msg = (
+            f"⚠️ *CLOUD MQTT DISCONNECTED*\n"
+            f"----------------------------------------\n"
+            f"• *Broker:* `{MQTT_DEST_BROKER}`\n"
+            f"• *Status:* Koneksi Terputus! Mengirim rekoneksi otomatis...\n"
+            f"• *Waktu:* `{time.strftime('%Y-%m-%d %H:%M:%S')}`"
+        )
+        send_telegram_sync(msg)
+
 
 def on_dest_publish(client, userdata, mid, reason_code=None, properties=None):
     print(f"[Cloud MQTT Verifikasi] Data BERHASIL dikirim ke Cloud! (Msg ID: {mid})")
@@ -161,22 +193,20 @@ async def sync_and_publish_loop(interval=10):
 async def main():
     # 1. Konfigurasi Koneksi Outbound ke HiveMQ Cloud
     mqtt_pub_client.on_connect = on_dest_connect
+    mqtt_pub_client.on_disconnect = on_dest_disconnect  # Callback saat koneksi cloud putus
     mqtt_pub_client.on_publish = on_dest_publish
     
-    # Set Kredensial User & Password
     mqtt_pub_client.username_pw_set(MQTT_USER.strip(), MQTT_PASS.strip())
 
-    # Set TLS standar (Sesuai dengan SSL/TLS aplikasi IoT MQTT Panel)
     mqtt_pub_client.tls_set(
         cert_reqs=ssl.CERT_REQUIRED, 
         tls_version=ssl.PROTOCOL_TLSv1_2
     )
 
-    # Menghubungkan LANGSUNG menggunakan HOSTNAME (Bukan IP) agar SSL SNI Valid
     try:
         print(f"[System] Menghubungkan ke HiveMQ Cloud ({MQTT_DEST_BROKER}:8883)...")
         mqtt_pub_client.connect(MQTT_DEST_BROKER, MQTT_DEST_PORT, 60)
-        mqtt_pub_client.loop_start()  # Loop paho otomatis menangani auto-reconnect
+        mqtt_pub_client.loop_start()
     except Exception as e:
         print(f"[System Error] Gagal koneksi awal ke Cloud: {e}")
 
@@ -205,7 +235,7 @@ async def main():
     print("  - Topic MQTT In : node/pir & node/mq135")
     print("==================================================\n")
 
-    # 4. Kirim Notifikasi Telegram
+    # 4. Kirim Notifikasi Telegram (Gateway Startup)
     hostname = socket.gethostname()
     try:
         ip_address = socket.gethostbyname(hostname)
@@ -228,6 +258,7 @@ async def main():
     asyncio.create_task(sync_and_publish_loop(interval=10))
 
     await asyncio.get_running_loop().create_future()
+
 
 if __name__ == "__main__":
     try:
