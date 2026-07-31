@@ -40,6 +40,50 @@ PubSubClient mqttClient(espClient);
 unsigned long previousMillis = 0;
 const long interval = 5000; // Kirim data setiap 5 detik
 
+// Variabel Status MQTT ("IDLE", "CONNECTING", "OK", "ERR")
+String mqttStatus = "IDLE";
+
+// Variabel Sensor Global untuk Tampilan OLED
+bool globalAdaGerakan = false;
+int globalMq135Raw = 0;
+
+// Fungsi terpusat menggambar tampilan OLED beserta simbol indikator status di kanan bawah
+void updateOLEDDisplay() {
+  display.clearDisplay();
+  
+  // Header
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("--- SENSOR MQTT ---");
+  
+  // Tampilan Sensor PIR (Posisi Y=16)
+  display.setCursor(0, 16);
+  display.print("Gerakan : ");
+  display.println(globalAdaGerakan ? "ADA" : "CLEAR");
+
+  // Tampilan Sensor MQ135 (Posisi Y=34)
+  display.setCursor(0, 34);
+  display.print("MQ135   : ");
+  display.print(globalMq135Raw);
+  display.println(" PPM");
+
+  // INDIKATOR STATUS SIMBOL VISUAL MQTT (Pojok Kanan Bawah: X=96, Y=54)
+  display.setTextSize(1);
+  display.setCursor(96, 54);
+
+  if (mqttStatus == "CONNECTING") {
+    display.print("[..]");  // Memproses koneksi / Mengirim
+  } else if (mqttStatus == "OK") {
+    display.print("[OK]");  // Terhubung & Publish Sukses
+  } else if (mqttStatus == "ERR") {
+    display.print("[ERR]"); // Gagal / Terputus dari Broker
+  } else {
+    display.print("    ");   // Idle
+  }
+
+  display.display();
+}
+
 // Fungsi untuk mencari IP Raspberry Pi via mDNS
 void findGatewayIP() {
   String fullHostname = String(targetHostname) + ".local";
@@ -82,6 +126,9 @@ void findGatewayIP() {
 // Reconnect Ke Broker MQTT jika terputus
 void reconnectMQTT() {
   while (!mqttClient.connected()) {
+    mqttStatus = "CONNECTING";
+    updateOLEDDisplay();
+
     Serial.print("Menghubungkan ke MQTT Broker pada ");
     Serial.print(ipGateway);
     Serial.println("...");
@@ -90,10 +137,15 @@ void reconnectMQTT() {
     
     if (mqttClient.connect(clientId.c_str())) {
       Serial.println("MQTT Terhubung!");
+      mqttStatus = "OK";
+      updateOLEDDisplay();
     } else {
       Serial.print("Gagal terhubung, rc=");
       Serial.print(mqttClient.state());
       Serial.println(" mencoba lagi dalam 5 detik...");
+      
+      mqttStatus = "ERR";
+      updateOLEDDisplay();
       delay(5000);
     }
   }
@@ -219,7 +271,6 @@ void setup() {
 }
 
 void loop() {
-  // Wajib dipanggil untuk menangani OTA & mDNS Service
   ArduinoOTA.handle();
   MDNS.update();
 
@@ -234,34 +285,29 @@ void loop() {
     previousMillis = currentMillis;
 
     // Pembacaan Sensor
-    int pirState = digitalRead(PIR_PIN);        // HIGH (1) jika ada gerakan, LOW (0) jika tidak
-    int mq135Raw = analogRead(MQ135_PIN);       // Nilai ADC raw dari 0 - 1023
+    int pirState = digitalRead(PIR_PIN); 
+    int mq135Raw = analogRead(MQ135_PIN); 
 
-    bool adaGerakan = (pirState == HIGH);
+    globalAdaGerakan = (pirState == HIGH);
+    globalMq135Raw = mq135Raw;
 
-    // Update Tampilan OLED
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setCursor(0, 0);
-    display.println("--- SENSOR MQTT ---");
-    
-    display.setCursor(0, 20);
-    display.print("Gerakan : ");
-    display.println(adaGerakan ? "ADA" : "CLEAR");
-
-    display.setCursor(0, 40);
-    display.print("MQ135   : ");
-    display.print(mq135Raw);
-    display.println(" PPM");
-    display.display();
-
-    // 1. Kirim Data PIR ke Topik MQTT "node/pir"
-    String pirPayload = adaGerakan ? "true" : "false";
-    mqttClient.publish("node/pir", pirPayload.c_str());
-
-    // 2. Kirim Data MQ135 ke Topik MQTT "node/mq135"
+    // Prepare Publish Payloads
+    String pirPayload = globalAdaGerakan ? "true" : "false";
     String mqPayload = String(mq135Raw);
-    mqttClient.publish("node/mq135", mqPayload.c_str());
+
+    // Kirim Data MQTT
+    bool pub1 = mqttClient.publish("node/pir", pirPayload.c_str());
+    bool pub2 = mqttClient.publish("node/mq135", mqPayload.c_str());
+
+    // Evaluasi status pengiriman
+    if (pub1 && pub2) {
+      mqttStatus = "OK";
+    } else {
+      mqttStatus = "ERR";
+    }
+
+    // Refresh Tampilan OLED
+    updateOLEDDisplay();
 
     Serial.print("MQTT Sent -> [node/pir]: ");
     Serial.print(pirPayload);

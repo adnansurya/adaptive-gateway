@@ -43,13 +43,65 @@ Coap coap(udp);
 unsigned long previousMillis = 0;
 const long interval = 5000; // Kirim data setiap 5 detik
 
+// Variabel Status Pengiriman CoAP untuk OLED
+// "IDLE" = Belum kirim, "SEND" = Mengirim, "ACK" = Diterima/Sukses, "ERR" = Gagal
+String coapStatus = "IDLE"; 
+
+// Variabel data sensor global untuk update layar saat ACK diterima
+float globalTemp = 0.0;
+float globalHum = 0.0;
+
+// Fungsi menggambar layar OLED utama beserta ikon indikator di pojok kanan bawah
+void updateOLEDDisplay() {
+  display.clearDisplay();
+  
+  // Header
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("--- SENSOR DATA ---");
+  
+  // Data Suhu (Dinaikkan ke Y=14 dan posisi rapat kiri)
+  display.setTextSize(2);
+  display.setCursor(0, 14);
+  display.print("T:");
+  display.print(globalTemp, 1);
+  display.setTextSize(1);
+  display.print(" C");
+
+  // Data Kelembapan (Dinaikkan ke Y=36 dan posisi rapat kiri)
+  display.setTextSize(2);
+  display.setCursor(0, 36);
+  display.print("H:");
+  display.print(globalHum, 1);
+  display.setTextSize(1);
+  display.print(" %");
+
+  // INDIKATOR STATUS COAP (Diatur di Pojok Kanan Bawah: X=96, Y=54)
+  display.setTextSize(1);
+  display.setCursor(96, 54);
+
+  if (coapStatus == "SEND") {
+    display.print("[..]");  // Sedang mengirim / Menunggu ACK
+  } else if (coapStatus == "ACK") {
+    display.print("[OK]");  // ACK Berhasil diterima dari Gateway
+  } else if (coapStatus == "ERR") {
+    display.print("[ERR]"); // Gagal mengirim paket UDP
+  } else {
+    display.print("    ");   // Idle
+  }
+
+  display.display();
+}
+
+// Callback ketika ACK/Response diterima dari Raspberry Pi Gateway
 void callbackResponse(CoapPacket &packet, IPAddress ip, int port) {
   Serial.println("[CoAP ACK] Response/ACK diterima dari Gateway!");
+  coapStatus = "ACK";
+  updateOLEDDisplay(); // Segera perbarui OLED menjadi [OK]
 }
 
 // Fungsi untuk mencari IP Raspberry Pi via mDNS
 void findGatewayIP() {
-  // Format nama host mDNS harus menggunakan ekstensi .local
   String fullHostname = String(targetHostname) + ".local";
 
   Serial.print("Mencari IP Gateway CoAP (");
@@ -64,14 +116,13 @@ void findGatewayIP() {
   display.display();
 
   while (ipGateway == IPAddress(0, 0, 0, 0)) {
-    // Gunakan WiFi.hostByName untuk menyelesaikan nama host .local
     int result = WiFi.hostByName(fullHostname.c_str(), ipGateway);
 
     if (result == 1 && ipGateway != IPAddress(0, 0, 0, 0)) {
-      break; // IP Berhasil Ditemukan!
+      break; 
     } else {
       Serial.println("Gateway belum ditemukan, mencoba lagi...");
-      ipGateway = IPAddress(0, 0, 0, 0); // Reset ke 0 jika gagal
+      ipGateway = IPAddress(0, 0, 0, 0); 
       delay(2000);
     }
   }
@@ -87,11 +138,9 @@ void findGatewayIP() {
   display.display();
   delay(2000);
 }
+
 void setupOTA() {
   ArduinoOTA.setHostname("ESP-CoAP-Device");
-
-  // Tambahkan password proteksi OTA (Opsional)
-  // ArduinoOTA.setPassword("PasswordRahasia123");
 
   ArduinoOTA.onStart([]() {
     String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
@@ -158,7 +207,6 @@ void setup() {
   // Inisialisasi WiFiManager
   WiFiManager wifiManager;
 
-  // Tampilkan petunjuk koneksi di OLED jika masuk ke mode Access Point
   display.clearDisplay();
   display.setCursor(0, 0);
   display.println("Connect ke AP:");
@@ -168,7 +216,6 @@ void setup() {
   display.println("\nIP: 192.168.4.1");
   display.display();
 
-  // Membuka Access Point jika tidak terkoneksi
   if (!wifiManager.autoConnect("ESP-CoAP")) {
     Serial.println("Gagal terhubung ke Wi-Fi dan waktu timeout habis.");
     display.clearDisplay();
@@ -185,7 +232,6 @@ void setup() {
   Serial.print("IP Address Wemos: ");
   Serial.println(WiFi.localIP());
 
-  // Tampilkan status terhubung pada OLED
   display.clearDisplay();
   display.setCursor(0, 0);
   display.println("WiFi Connected!");
@@ -213,7 +259,6 @@ void setup() {
 }
 
 void loop() {
-  // Wajib dipanggil untuk menangani OTA & mDNS Service
   ArduinoOTA.handle();
   MDNS.update();
 
@@ -237,23 +282,13 @@ void loop() {
       return;
     }
 
-    // Update Tampilan OLED dengan Bacaan Sensor
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setCursor(0, 0);
-    display.println("--- SENSOR DATA ---");
-    
-    display.setTextSize(2);
-    display.setCursor(0, 18);
-    display.print("T: ");
-    display.print(temp, 1);
-    display.println(" C");
+    // Simpan ke variabel global
+    globalTemp = temp;
+    globalHum = hum;
 
-    display.setCursor(0, 42);
-    display.print("H: ");
-    display.print(hum, 1);
-    display.println(" %");
-    display.display();
+    // Set status sedang mengirim
+    coapStatus = "SEND";
+    updateOLEDDisplay();
 
     // Format Payload JSON
     String payload = "{\"suhu\":" + String(temp, 1) + ",\"kelembapan\":" + String(hum, 1) + "}";
@@ -263,12 +298,12 @@ void loop() {
     Serial.print(": ");
     Serial.println(payload);
 
-    // Kirim CoAP POST menggunakan IP Gateway yang ditemukan mDNS
+    // Kirim CoAP POST
     int msgId = coap.send(
       ipGateway,
       portCoap,
       "sensor/dht",
-      COAP_CON,                  // Type: Confirmable
+      COAP_CON,                  // Type: Confirmable (Membutuhkan ACK)
       COAP_POST,                 // Method: POST
       NULL,                      // Token (optional)
       0,                         // Token Length
@@ -278,5 +313,11 @@ void loop() {
 
     Serial.print("Message ID: ");
     Serial.println(msgId);
+
+    // Jika gagal mengirim (msgId <= 0), langsung tampilkan status error
+    if (msgId <= 0) {
+      coapStatus = "ERR";
+      updateOLEDDisplay();
+    }
   }
 }
