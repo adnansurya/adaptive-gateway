@@ -1,29 +1,32 @@
+import socket
 import asyncio
 import logging
 import json
 import time
+import ssl
 import aiocoap.resource as resource
 import aiocoap
 import paho.mqtt.client as mqtt
 
-# Meredam log internal aiocoap agar output terminal tetap bersih
+# Meredam log internal aiocoap
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("coap-server").setLevel(logging.WARNING)
 
-# ==================== KONFIGURASI MQTT BROKER ====================
-# Broker Server Utama (Tujuan Pengiriman Data Gabungan)
-MQTT_DEST_BROKER = "broker.hivemq.com"  # Ganti dengan IP/Host Broker Anda
-MQTT_DEST_PORT = 1883
-MQTT_DEST_TOPIC = "gateway/data_sederhana"
+# ==================== KONFIGURASI MQTT BROKER UTAMA (CLOUD) ====================
+MQTT_DEST_BROKER = "2d3014c691e840d98b7e4292008d7f8c.s1.eu.hivemq.cloud"
+MQTT_DEST_PORT = 8883
+MQTT_DEST_TOPIC = "gateway/all_data"
 
-# Broker Lokal/Input untuk Sensor PIR & MQ135
-MQTT_SRC_BROKER = "localhost"          # Ganti ke IP Wemos/ESP lain jika broker ada di luar
+MQTT_USER = "donat"
+MQTT_PASS = "12345678"
+
+# ==================== KONFIGURASI MQTT BROKER LOKAL ====================
+MQTT_SRC_BROKER = "localhost"
 MQTT_SRC_PORT = 1883
-MQTT_SRC_TOPICS = [("node/pir", 0), ("node/mq135", 0)]  # Mendengarkan topik PIR & MQ135
+MQTT_SRC_TOPICS = [("node/pir", 0), ("node/mq135", 0)]
 
 
 class DataStore:
-    """Buffer sederhana untuk menyimpan status terakhir dari semua sensor."""
     def __init__(self):
         self.suhu = 0.0
         self.kelembapan = 0.0
@@ -31,22 +34,18 @@ class DataStore:
         self.mq135_ppm = 0
 
     def update_coap_dht(self, data):
-        """Memproses data CoAP dari DHT11 (Wemos D1 Mini)"""
         self.suhu = data.get("suhu", self.suhu)
         self.kelembapan = data.get("kelembapan", self.kelembapan)
         print(f"[CoAP IN] Suhu: {self.suhu}°C | Kelembapan: {self.kelembapan}%")
 
     def update_mqtt_node(self, topic, payload_str):
-        """Memproses data MQTT dari Sensor PIR dan MQ135"""
         try:
-            # Jika payload berupa JSON, parse nilainya. Jika string angka/boolean, langsung baca.
             try:
                 data = json.loads(payload_str)
             except json.JSONDecodeError:
                 data = payload_str
 
             if "pir" in topic:
-                # Menerima data PIR (misal: true/false, 1/0, atau "MOTION"/"CLEAR")
                 if isinstance(data, dict):
                     self.gerakan = bool(data.get("gerakan", False))
                 else:
@@ -54,7 +53,6 @@ class DataStore:
                 print(f"[MQTT IN] Sensor PIR (Gerakan): {self.gerakan}")
 
             elif "mq135" in topic:
-                # Menerima data Kualitas Udara MQ135 (misal: 420 atau {"ppm": 420})
                 if isinstance(data, dict):
                     self.mq135_ppm = int(data.get("ppm", 0))
                 else:
@@ -62,10 +60,9 @@ class DataStore:
                 print(f"[MQTT IN] Sensor MQ135 (Kualitas Udara): {self.mq135_ppm} PPM")
 
         except Exception as e:
-            print(f"[MQTT IN Error] Format payload dari topic {topic} tidak valid: {e}")
+            print(f"[MQTT IN Error] Format payload tidak valid: {e}")
 
     def get_simple_payload(self):
-        """Menyatukan semua data sensor menjadi format JSON yang sederhana."""
         payload = {
             "suhu": round(self.suhu, 1),
             "kelembapan": round(self.kelembapan, 1),
@@ -76,13 +73,26 @@ class DataStore:
         return json.dumps(payload)
 
 
-# Global Store & MQTT Client Publisher
 store = DataStore()
-mqtt_pub_client = mqtt.Client(client_id="AdaptiveGateway_Publisher")
+
+mqtt_pub_client = mqtt.Client(
+    callback_api_version=mqtt.CallbackAPIVersion.VERSION2, 
+    client_id="AdaptiveGateway_Publisher"
+)
+
+
+# ==================== CALLBACKS ====================
+def on_dest_connect(client, userdata, flags, rc, properties=None):
+    if rc == 0:
+        print("\n[Cloud MQTT Success] Terhubung KE HIVEMQ CLOUD!\n")
+    else:
+        print(f"\n[Cloud MQTT Error] Gagal terhubung ke HiveMQ Cloud! Return Code: {rc}\n")
+
+def on_dest_publish(client, userdata, mid, reason_code=None, properties=None):
+    print(f"[Cloud MQTT Verifikasi] Data BERHASIL dikirim ke Cloud! (Msg ID: {mid})")
 
 
 class DHTSensorResource(resource.Resource):
-    """Resource Endpoint CoAP (/sensor/dht)"""
     async def render_post(self, request):
         try:
             raw_payload = request.payload.decode('utf-8')
@@ -93,41 +103,62 @@ class DHTSensorResource(resource.Resource):
             return aiocoap.Message(code=aiocoap.BAD_REQUEST, payload=b"Error")
 
 
-def on_mqtt_message(client, userdata, msg):
-    """Callback saat ada pesan masuk dari Sensor PIR / MQ135"""
+def on_local_mqtt_message(client, userdata, msg):
     payload_str = msg.payload.decode('utf-8')
     store.update_mqtt_node(msg.topic, payload_str)
 
 
+# Task Khusus untuk menjaga koneksi ke Cloud (Auto Reconnect & Resolve IPv4)
+async def maintain_cloud_connection():
+    mqtt_pub_client.on_connect = on_dest_connect
+    mqtt_pub_client.on_publish = on_dest_publish
+    mqtt_pub_client.username_pw_set(MQTT_USER, MQTT_PASS)
+
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    mqtt_pub_client.tls_set_context(context)
+
+    mqtt_pub_client.loop_start()
+
+    while True:
+        if not mqtt_pub_client.is_connected():
+            try:
+                # Dapatkan IP IPv4 secara eksplisit untuk menghindari bug IPv6 unreachable
+                cloud_ip = socket.gethostbyname(MQTT_DEST_BROKER)
+                print(f"[System] Menghubungkan ulang ke Cloud ({MQTT_DEST_BROKER} -> {cloud_ip}:8883)...")
+                mqtt_pub_client.connect(cloud_ip, MQTT_DEST_PORT, 60)
+            except Exception as e:
+                print(f"[Cloud Reconnect Failure] {e}. Mencoba lagi dalam 10 detik...")
+        await asyncio.sleep(10)
+
+
 async def sync_and_publish_loop(interval=10):
-    """Menggabungkan data CoAP + MQTT dan mempublikasikannya setiap X detik."""
     while True:
         await asyncio.sleep(interval)
         
-        # Buat JSON sederhana
         json_payload = store.get_simple_payload()
         
         print("\n================ [ADAPTIVE GATEWAY AGGREGATION] ================")
-        print(f"Penerbitan Ke Broker [{MQTT_DEST_TOPIC}]:")
+        print(f"Mengirim Ke Topic Cloud [{MQTT_DEST_TOPIC}]:")
         print(json_payload)
         print("================================================================\n")
 
-        # Publish ke Broker Destinasi
-        mqtt_pub_client.publish(MQTT_DEST_TOPIC, json_payload)
+        info = mqtt_pub_client.publish(MQTT_DEST_TOPIC, json_payload, qos=1)
+        if info.rc != mqtt.MQTT_ERR_SUCCESS:
+            print(f"[Cloud MQTT Warning] Belum terhubung ke Cloud (Code: {info.rc})")
 
 
 async def main():
-    # 1. Start Client MQTT Outbound (Pengirim Data Utama)
-    try:
-        mqtt_pub_client.connect(MQTT_DEST_BROKER, MQTT_DEST_PORT, 60)
-        mqtt_pub_client.loop_start()
-        print(f"[System] MQTT Publisher terhubung ke {MQTT_DEST_BROKER}")
-    except Exception as e:
-        print(f"[System Error] Gagal terhubung ke MQTT Broker Utama: {e}")
+    # 1. Jalankan Penjaga Koneksi Cloud di Background
+    asyncio.create_task(maintain_cloud_connection())
 
-    # 2. Start Client MQTT Inbound (Penerima PIR & MQ135)
-    mqtt_sub_client = mqtt.Client(client_id="AdaptiveGateway_Subscriber")
-    mqtt_sub_client.on_message = on_mqtt_message
+    # 2. Setup Client MQTT Inbound Lokal
+    mqtt_sub_client = mqtt.Client(
+        callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        client_id="AdaptiveGateway_Subscriber"
+    )
+    mqtt_sub_client.on_message = on_local_mqtt_message
     try:
         mqtt_sub_client.connect(MQTT_SRC_BROKER, MQTT_SRC_PORT, 60)
         mqtt_sub_client.subscribe(MQTT_SRC_TOPICS)
@@ -136,18 +167,18 @@ async def main():
     except Exception as e:
         print(f"[System Warning] Broker MQTT Lokal tidak terjangkau ({e})")
 
-    # 3. Start Server CoAP (Penerima DHT11 Wemos)
+    # 3. Start Server CoAP
     root = resource.Site()
     root.add_resource(['sensor', 'dht'], DHTSensorResource())
     await aiocoap.Context.create_server_context(root, bind=('0.0.0.0', 5683))
 
     print("\n==================================================")
-    print("  ADAPTIVE GATEWAY READY (CoAP + MQTT)")
+    print("  ADAPTIVE GATEWAY READY (CoAP + MQTT -> CLOUD)")
     print("  - Endpoint CoAP : coap://<IP>:5683/sensor/dht")
     print("  - Topic MQTT In : node/pir & node/mq135")
     print("==================================================\n")
 
-    # 4. Jalankan Loop Penggabungan Data Periodik
+    # 4. Loop Penggabungan Data
     asyncio.create_task(sync_and_publish_loop(interval=10))
 
     await asyncio.get_running_loop().create_future()
