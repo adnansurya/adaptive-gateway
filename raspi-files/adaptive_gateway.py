@@ -7,6 +7,7 @@ import socket
 import urllib.parse
 import urllib.request
 import random
+import subprocess  
 import aiocoap.resource as resource
 import aiocoap
 import paho.mqtt.client as mqtt
@@ -34,6 +35,44 @@ MQTT_PASS = "12345678"
 MQTT_SRC_BROKER = "localhost"
 MQTT_SRC_PORT = 1883
 MQTT_SRC_TOPICS = [("node/pir", 0), ("node/mq135", 0)]
+
+# --- FUNGSI MENDAPATKAN IP & SSID WARRINGAN ---
+def get_wlan_ip():
+    """Mengambil IP address aktif dari interface jaringan/wlan yang terhubung."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "Tidak Terhubung"
+
+
+def get_wifi_ssid():
+    """Mengambil nama SSID Wi-Fi tempat Raspberry Pi sedang terhubung."""
+    try:
+        # Coba cara 1: Menggunakan iwgetid (Paling cepat di Raspberry Pi OS)
+        result = subprocess.check_output(["iwgetid", "-r"], stderr=subprocess.DEVNULL)
+        ssid = result.decode("utf-8").strip()
+        if ssid:
+            return ssid
+    except Exception:
+        pass
+
+    try:
+        # Coba cara 2: Menggunakan nmcli (NetworkManager)
+        result = subprocess.check_output(
+            ["nmcli", "-t", "-f", "active,ssid", "dev", "wifi"], 
+            stderr=subprocess.DEVNULL
+        )
+        for line in result.decode("utf-8").split("\n"):
+            if line.startswith("yes:"):
+                return line.split(":")[1]
+    except Exception:
+        pass
+
+    return "Tidak Diketahui / Kabel LAN"
 
 
 # --- FUNGSI PENGIRIMAN TELEGRAM ---
@@ -193,7 +232,7 @@ async def sync_and_publish_loop(interval=10):
 async def main():
     # 1. Konfigurasi Koneksi Outbound ke HiveMQ Cloud
     mqtt_pub_client.on_connect = on_dest_connect
-    mqtt_pub_client.on_disconnect = on_dest_disconnect  # Callback saat koneksi cloud putus
+    mqtt_pub_client.on_disconnect = on_dest_disconnect 
     mqtt_pub_client.on_publish = on_dest_publish
     
     mqtt_pub_client.username_pw_set(MQTT_USER.strip(), MQTT_PASS.strip())
@@ -237,16 +276,15 @@ async def main():
 
     # 4. Kirim Notifikasi Telegram (Gateway Startup)
     hostname = socket.gethostname()
-    try:
-        ip_address = socket.gethostbyname(hostname)
-    except Exception:
-        ip_address = "IP Tidak Ditemukan"
+    ip_wlan = get_wlan_ip()
+    wifi_ssid = get_wifi_ssid()  # <--- Ambil SSID Wi-Fi aktif
 
     pesan_telegram = (
         f"🚀 *ADAPTIVE GATEWAY ONLINE*\n"
         f"----------------------------------------\n"
         f"• *Device:* `{hostname}`\n"
-        f"• *IP Local:* `{ip_address}`\n"
+        f"• *SSID Wi-Fi:* `{wifi_ssid}`\n"  # <--- Menampilkan SSID
+        f"• *IP WLAN / Local:* `{ip_wlan}`\n"
         f"• *Status:* Service Aktif & Berjalan\n"
         f"• *Waktu:* `{time.strftime('%Y-%m-%d %H:%M:%S')}`\n"
         f"----------------------------------------\n"
