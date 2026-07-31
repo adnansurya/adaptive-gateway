@@ -16,8 +16,8 @@ logging.basicConfig(level=logging.INFO)
 logging.getLogger("coap-server").setLevel(logging.WARNING)
 
 # ==================== KONFIGURASI TELEGRAM BOT ====================
-TELEGRAM_BOT_TOKEN = "8236898914:AAHnrf84yJwaXhTM3gkzV8zv_xJ32cYnFQ8"
-TELEGRAM_CHAT_ID = "108488036"
+TELEGRAM_BOT_TOKEN = "8027503464:AAEtNkIbhf4saWoOzUD8irC8ug1hBy0ho-Y"
+TELEGRAM_CHAT_ID = "8054572628"
 
 # Variable pelacak status koneksi Cloud (mencegah pesan spam jika disconnect berulang)
 is_cloud_connected = False
