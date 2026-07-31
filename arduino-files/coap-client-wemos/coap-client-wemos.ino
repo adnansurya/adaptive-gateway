@@ -16,19 +16,23 @@
 // Library untuk Arduino OTA (Over The Air) Update
 #include <ArduinoOTA.h>
 
+// Library untuk mDNS Auto-Discovery
+#include <ESP8266mDNS.h>
+
 // Konfigurasi Layar OLED (128x64 pixel)
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
-#define OLED_RESET    -1 // -1 jika menggunakan pin reset bersama dengan ESP8266
-#define SCREEN_ADDRESS 0x3C // Alamat I2C umum OLED 0.96 inch
+#define OLED_RESET    -1 
+#define SCREEN_ADDRESS 0x3C 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// IP Address Raspberry Pi (Gateway CoAP)
-IPAddress ipGateway(192, 168, 1, 53); // Ganti dengan IP Raspberry Pi Anda
+// Hostname mDNS Raspberry Pi Gateway (tanpa .local)
+const char* targetHostname = "mksrobotics"; 
+IPAddress ipGateway(0, 0, 0, 0); // Akan diisi otomatis oleh mDNS
 const int portCoap = 5683;
 
-// Config DHT11 (Dipindahkan ke D4 / GPIO2)
-#define DHTPIN D4     // Pin Data DHT11 terhubung ke D4
+// Config DHT11 (Pin D4 / GPIO2)
+#define DHTPIN D4     
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
@@ -43,23 +47,56 @@ void callbackResponse(CoapPacket &packet, IPAddress ip, int port) {
   Serial.println("[CoAP ACK] Response/ACK diterima dari Gateway!");
 }
 
+// Fungsi untuk mencari IP Raspberry Pi via mDNS
+void findGatewayIP() {
+  // Format nama host mDNS harus menggunakan ekstensi .local
+  String fullHostname = String(targetHostname) + ".local";
+
+  Serial.print("Mencari IP Gateway CoAP (");
+  Serial.print(fullHostname);
+  Serial.println(")...");
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("Mencari Gateway...");
+  display.println(fullHostname);
+  display.display();
+
+  while (ipGateway == IPAddress(0, 0, 0, 0)) {
+    // Gunakan WiFi.hostByName untuk menyelesaikan nama host .local
+    int result = WiFi.hostByName(fullHostname.c_str(), ipGateway);
+
+    if (result == 1 && ipGateway != IPAddress(0, 0, 0, 0)) {
+      break; // IP Berhasil Ditemukan!
+    } else {
+      Serial.println("Gateway belum ditemukan, mencoba lagi...");
+      ipGateway = IPAddress(0, 0, 0, 0); // Reset ke 0 jika gagal
+      delay(2000);
+    }
+  }
+
+  Serial.print("Gateway Ditemukan! IP: ");
+  Serial.println(ipGateway);
+
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("Gateway Found!");
+  display.print("IP: ");
+  display.println(ipGateway);
+  display.display();
+  delay(2000);
+}
 void setupOTA() {
-  // Nama Host ESP8266 yang akan muncul di port Arduino IDE / Jaringan
   ArduinoOTA.setHostname("ESP-CoAP-Device");
 
-  // Anda dapat menambahkan password untuk upload via OTA jika diperlukan:
-  // ArduinoOTA.setPassword("admin123");
+  // Tambahkan password proteksi OTA (Opsional)
+  // ArduinoOTA.setPassword("PasswordRahasia123");
 
   ArduinoOTA.onStart([]() {
-    String type;
-    if (ArduinoOTA.getCommand() == U_FLASH) {
-      type = "sketch";
-    } else { // U_SPIFFS
-      type = "filesystem";
-    }
+    String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
     Serial.println("Start updating " + type);
 
-    // Tampilkan indikator update pada OLED
     display.clearDisplay();
     display.setTextSize(1);
     display.setCursor(0, 0);
@@ -81,7 +118,6 @@ void setupOTA() {
     int percent = (progress / (total / 100));
     Serial.printf("Progress: %u%%\r", percent);
     
-    // Tampilkan persentase progress pada OLED
     display.clearDisplay();
     display.setTextSize(1);
     display.setCursor(0, 0);
@@ -94,11 +130,6 @@ void setupOTA() {
 
   ArduinoOTA.onError([](ota_error_t error) {
     Serial.printf("Error[%u]: ", error);
-    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-    else if (error == OTA_END_ERROR) Serial.println("End Failed");
   });
 
   ArduinoOTA.begin();
@@ -161,9 +192,17 @@ void setup() {
   display.print("IP: ");
   display.println(WiFi.localIP());
   display.display();
-  delay(2000);
+  delay(1500);
 
-  // Inisialisasi Fitur OTA setelah Wi-Fi terhubung
+  // Inisialisasi mDNS Client
+  if (MDNS.begin("esp-coap-client")) {
+    Serial.println("mDNS responder started");
+  }
+
+  // Cari IP Gateway Raspberry Pi secara otomatis
+  findGatewayIP();
+
+  // Inisialisasi Fitur OTA
   setupOTA();
 
   // Daftarkan handler response CoAP
@@ -174,8 +213,9 @@ void setup() {
 }
 
 void loop() {
-  // Wajib dipanggil di setiap siklus loop untuk menangani request OTA
+  // Wajib dipanggil untuk menangani OTA & mDNS Service
   ArduinoOTA.handle();
+  MDNS.update();
 
   coap.loop();
 
@@ -190,6 +230,7 @@ void loop() {
       Serial.println("Gagal membaca dari sensor DHT11!");
       
       display.clearDisplay();
+      display.setTextSize(1);
       display.setCursor(0, 0);
       display.println("Status: DHT Error!");
       display.display();
@@ -217,19 +258,21 @@ void loop() {
     // Format Payload JSON
     String payload = "{\"suhu\":" + String(temp, 1) + ",\"kelembapan\":" + String(hum, 1) + "}";
     
-    Serial.print("Mengirim CoAP POST ke Gateway: ");
+    Serial.print("Mengirim CoAP POST ke IP ");
+    Serial.print(ipGateway);
+    Serial.print(": ");
     Serial.println(payload);
 
-    // Kirim CoAP POST
+    // Kirim CoAP POST menggunakan IP Gateway yang ditemukan mDNS
     int msgId = coap.send(
       ipGateway,
       portCoap,
       "sensor/dht",
-      COAP_CON,                  // Type: Confirmable (butuh balasan)
+      COAP_CON,                  // Type: Confirmable
       COAP_POST,                 // Method: POST
       NULL,                      // Token (optional)
       0,                         // Token Length
-      (uint8_t*)payload.c_str(), // Payload data dalam bentuk byte array
+      (uint8_t*)payload.c_str(), // Payload data
       payload.length()           // Panjang payload
     );
 
