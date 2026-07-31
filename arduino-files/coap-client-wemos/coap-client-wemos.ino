@@ -245,12 +245,12 @@ void loop() {
     
     display.setTextSize(2);
     display.setCursor(0, 18);
-    display.print("Suhu: ");
+    display.print("T: ");
     display.print(temp, 1);
     display.println(" C");
 
     display.setCursor(0, 42);
-    display.print("Humi: ");
+    display.print("H: ");
     display.print(hum, 1);
     display.println(" %");
     display.display();
