@@ -13,6 +13,9 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+// Library untuk Arduino OTA (Over The Air) Update
+#include <ArduinoOTA.h>
+
 // Konfigurasi Layar OLED (128x64 pixel)
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -24,7 +27,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 IPAddress ipGateway(192, 168, 1, 53); // Ganti dengan IP Raspberry Pi Anda
 const int portCoap = 5683;
 
-// Config DHT11
+// Config DHT11 (Dipindahkan ke D4 / GPIO2)
 #define DHTPIN D4     // Pin Data DHT11 terhubung ke D4
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
@@ -38,6 +41,68 @@ const long interval = 5000; // Kirim data setiap 5 detik
 
 void callbackResponse(CoapPacket &packet, IPAddress ip, int port) {
   Serial.println("[CoAP ACK] Response/ACK diterima dari Gateway!");
+}
+
+void setupOTA() {
+  // Nama Host ESP8266 yang akan muncul di port Arduino IDE / Jaringan
+  ArduinoOTA.setHostname("ESP-CoAP-Device");
+
+  // Anda dapat menambahkan password untuk upload via OTA jika diperlukan:
+  // ArduinoOTA.setPassword("admin123");
+
+  ArduinoOTA.onStart([]() {
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH) {
+      type = "sketch";
+    } else { // U_SPIFFS
+      type = "filesystem";
+    }
+    Serial.println("Start updating " + type);
+
+    // Tampilkan indikator update pada OLED
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.println("--- OTA UPDATE ---");
+    display.println("Updating Firmware...");
+    display.display();
+  });
+
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.println("Update Selesai!");
+    display.println("Rebooting...");
+    display.display();
+  });
+
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    int percent = (progress / (total / 100));
+    Serial.printf("Progress: %u%%\r", percent);
+    
+    // Tampilkan persentase progress pada OLED
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.println("--- OTA UPDATE ---");
+    display.setTextSize(2);
+    display.setCursor(20, 25);
+    display.printf("%d%%", percent);
+    display.display();
+  });
+
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+
+  ArduinoOTA.begin();
+  Serial.println("OTA Service Ready!");
 }
 
 void setup() {
@@ -72,7 +137,7 @@ void setup() {
   display.println("\nIP: 192.168.4.1");
   display.display();
 
-  // Membuka Access Point dengan nama SSID baru: "ESP-CoAP"
+  // Membuka Access Point jika tidak terkoneksi
   if (!wifiManager.autoConnect("ESP-CoAP")) {
     Serial.println("Gagal terhubung ke Wi-Fi dan waktu timeout habis.");
     display.clearDisplay();
@@ -98,6 +163,9 @@ void setup() {
   display.display();
   delay(2000);
 
+  // Inisialisasi Fitur OTA setelah Wi-Fi terhubung
+  setupOTA();
+
   // Daftarkan handler response CoAP
   coap.response(callbackResponse);
 
@@ -106,6 +174,9 @@ void setup() {
 }
 
 void loop() {
+  // Wajib dipanggil di setiap siklus loop untuk menangani request OTA
+  ArduinoOTA.handle();
+
   coap.loop();
 
   unsigned long currentMillis = millis();
