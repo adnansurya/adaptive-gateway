@@ -1,9 +1,12 @@
-import socket
 import asyncio
 import logging
 import json
 import time
 import ssl
+import socket
+import urllib.parse
+import urllib.request
+import random
 import aiocoap.resource as resource
 import aiocoap
 import paho.mqtt.client as mqtt
@@ -11,6 +14,10 @@ import paho.mqtt.client as mqtt
 # Meredam log internal aiocoap
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("coap-server").setLevel(logging.WARNING)
+
+# ==================== KONFIGURASI TELEGRAM BOT ====================
+TELEGRAM_BOT_TOKEN = "8236898914:AAHnrf84yJwaXhTM3gkzV8zv_xJ32cYnFQ8"
+TELEGRAM_CHAT_ID = "108488036"
 
 # ==================== KONFIGURASI MQTT BROKER UTAMA (CLOUD) ====================
 MQTT_DEST_BROKER = "2d3014c691e840d98b7e4292008d7f8c.s1.eu.hivemq.cloud"
@@ -24,6 +31,29 @@ MQTT_PASS = "12345678"
 MQTT_SRC_BROKER = "localhost"
 MQTT_SRC_PORT = 1883
 MQTT_SRC_TOPICS = [("node/pir", 0), ("node/mq135", 0)]
+
+
+# --- FUNGSI PENGIRIMAN TELEGRAM ---
+async def send_telegram_notification(message):
+    if TELEGRAM_BOT_TOKEN == "GANTI_DENGAN_TOKEN_BOT_ANDA":
+        return
+
+    def _send():
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+            payload = urllib.parse.urlencode({
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": message,
+                "parse_mode": "Markdown"
+            }).encode('utf-8')
+            
+            req = urllib.request.Request(url, data=payload)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                pass
+        except Exception as e:
+            print(f"[Telegram Error] Gagal mengirim pesan: {e}")
+
+    await asyncio.to_thread(_send)
 
 
 class DataStore:
@@ -75,9 +105,11 @@ class DataStore:
 
 store = DataStore()
 
+# Memakai Client ID acak agar tidak bentrok koneksi
+client_random_id = f"AdaptiveGateway_Pub_{random.randint(1000, 9999)}"
 mqtt_pub_client = mqtt.Client(
     callback_api_version=mqtt.CallbackAPIVersion.VERSION2, 
-    client_id="AdaptiveGateway_Publisher"
+    client_id=client_random_id
 )
 
 
@@ -86,7 +118,9 @@ def on_dest_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         print("\n[Cloud MQTT Success] Terhubung KE HIVEMQ CLOUD!\n")
     else:
-        print(f"\n[Cloud MQTT Error] Gagal terhubung ke HiveMQ Cloud! Return Code: {rc}\n")
+        print(f"\n[Cloud MQTT Error] Gagal terhubung ke HiveMQ Cloud! Reason/Code: {rc}")
+        if str(rc) in ["Not authorized", "5", "Bad username or password"]:
+            print(" -> PERIKSA USERNAME & PASSWORD DI HIVEMQ CLOUD CONSOLE!")
 
 def on_dest_publish(client, userdata, mid, reason_code=None, properties=None):
     print(f"[Cloud MQTT Verifikasi] Data BERHASIL dikirim ke Cloud! (Msg ID: {mid})")
@@ -108,31 +142,6 @@ def on_local_mqtt_message(client, userdata, msg):
     store.update_mqtt_node(msg.topic, payload_str)
 
 
-# Task Khusus untuk menjaga koneksi ke Cloud (Auto Reconnect & Resolve IPv4)
-async def maintain_cloud_connection():
-    mqtt_pub_client.on_connect = on_dest_connect
-    mqtt_pub_client.on_publish = on_dest_publish
-    mqtt_pub_client.username_pw_set(MQTT_USER, MQTT_PASS)
-
-    context = ssl.create_default_context()
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    mqtt_pub_client.tls_set_context(context)
-
-    mqtt_pub_client.loop_start()
-
-    while True:
-        if not mqtt_pub_client.is_connected():
-            try:
-                # Dapatkan IP IPv4 secara eksplisit untuk menghindari bug IPv6 unreachable
-                cloud_ip = socket.gethostbyname(MQTT_DEST_BROKER)
-                print(f"[System] Menghubungkan ulang ke Cloud ({MQTT_DEST_BROKER} -> {cloud_ip}:8883)...")
-                mqtt_pub_client.connect(cloud_ip, MQTT_DEST_PORT, 60)
-            except Exception as e:
-                print(f"[Cloud Reconnect Failure] {e}. Mencoba lagi dalam 10 detik...")
-        await asyncio.sleep(10)
-
-
 async def sync_and_publish_loop(interval=10):
     while True:
         await asyncio.sleep(interval)
@@ -150,8 +159,26 @@ async def sync_and_publish_loop(interval=10):
 
 
 async def main():
-    # 1. Jalankan Penjaga Koneksi Cloud di Background
-    asyncio.create_task(maintain_cloud_connection())
+    # 1. Konfigurasi Koneksi Outbound ke HiveMQ Cloud
+    mqtt_pub_client.on_connect = on_dest_connect
+    mqtt_pub_client.on_publish = on_dest_publish
+    
+    # Set Kredensial User & Password
+    mqtt_pub_client.username_pw_set(MQTT_USER.strip(), MQTT_PASS.strip())
+
+    # Set TLS standar (Sesuai dengan SSL/TLS aplikasi IoT MQTT Panel)
+    mqtt_pub_client.tls_set(
+        cert_reqs=ssl.CERT_REQUIRED, 
+        tls_version=ssl.PROTOCOL_TLSv1_2
+    )
+
+    # Menghubungkan LANGSUNG menggunakan HOSTNAME (Bukan IP) agar SSL SNI Valid
+    try:
+        print(f"[System] Menghubungkan ke HiveMQ Cloud ({MQTT_DEST_BROKER}:8883)...")
+        mqtt_pub_client.connect(MQTT_DEST_BROKER, MQTT_DEST_PORT, 60)
+        mqtt_pub_client.loop_start()  # Loop paho otomatis menangani auto-reconnect
+    except Exception as e:
+        print(f"[System Error] Gagal koneksi awal ke Cloud: {e}")
 
     # 2. Setup Client MQTT Inbound Lokal
     mqtt_sub_client = mqtt.Client(
@@ -178,11 +205,29 @@ async def main():
     print("  - Topic MQTT In : node/pir & node/mq135")
     print("==================================================\n")
 
-    # 4. Loop Penggabungan Data
+    # 4. Kirim Notifikasi Telegram
+    hostname = socket.gethostname()
+    try:
+        ip_address = socket.gethostbyname(hostname)
+    except Exception:
+        ip_address = "IP Tidak Ditemukan"
+
+    pesan_telegram = (
+        f"🚀 *ADAPTIVE GATEWAY ONLINE*\n"
+        f"----------------------------------------\n"
+        f"• *Device:* `{hostname}`\n"
+        f"• *IP Local:* `{ip_address}`\n"
+        f"• *Status:* Service Aktif & Berjalan\n"
+        f"• *Waktu:* `{time.strftime('%Y-%m-%d %H:%M:%S')}`\n"
+        f"----------------------------------------\n"
+        f" Gateway siap memproses data CoAP & MQTT."
+    )
+    asyncio.create_task(send_telegram_notification(pesan_telegram))
+
+    # 5. Loop Penggabungan Data Periodik
     asyncio.create_task(sync_and_publish_loop(interval=10))
 
     await asyncio.get_running_loop().create_future()
-
 
 if __name__ == "__main__":
     try:
