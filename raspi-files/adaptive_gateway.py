@@ -164,11 +164,18 @@ def on_dest_connect(client, userdata, flags, rc, properties=None):
         # Kirim Notifikasi jika sebelumnya dalam posisi disconnected/terputus
         if not is_cloud_connected:
             is_cloud_connected = True
+            
+            # Ambil SSID dan IP terbaru saat koneksi terhubung
+            wifi_ssid = get_wifi_ssid()
+            ip_wlan = get_wlan_ip()
+            
             msg = (
                 f"✅ *CLOUD MQTT CONNECTED*\n"
                 f"----------------------------------------\n"
                 f"• *Broker:* `{MQTT_DEST_BROKER}`\n"
-                f"• *Status:* Koneksi ke HiveMQ Cloud *BERHASIL*\n"
+                f"• *SSID Wi-Fi:* `{wifi_ssid}`\n"
+                f"• *IP WLAN / Local:* `{ip_wlan}`\n"
+                f"• *Status:* Terhubung ke HiveMQ Cloud *BERHASIL*\n"
                 f"• *Waktu:* `{time.strftime('%Y-%m-%d %H:%M:%S')}`"
             )
             send_telegram_sync(msg)
@@ -183,15 +190,21 @@ def on_dest_disconnect(client, userdata, flags, rc, properties=None):
     # Kirim Notifikasi jika sebelumnya terhubung lalu terputus
     if is_cloud_connected:
         is_cloud_connected = False
+        
+        # Ambil SSID dan IP saat koneksi terputus
+        wifi_ssid = get_wifi_ssid()
+        ip_wlan = get_wlan_ip()
+        
         msg = (
             f"⚠️ *CLOUD MQTT DISCONNECTED*\n"
             f"----------------------------------------\n"
             f"• *Broker:* `{MQTT_DEST_BROKER}`\n"
+            f"• *SSID Wi-Fi:* `{wifi_ssid}`\n"
+            f"• *IP WLAN / Local:* `{ip_wlan}`\n"
             f"• *Status:* Koneksi Terputus! Mengirim rekoneksi otomatis...\n"
             f"• *Waktu:* `{time.strftime('%Y-%m-%d %H:%M:%S')}`"
         )
         send_telegram_sync(msg)
-
 
 def on_dest_publish(client, userdata, mid, reason_code=None, properties=None):
     print(f"[Cloud MQTT Verifikasi] Data BERHASIL dikirim ke Cloud! (Msg ID: {mid})")
