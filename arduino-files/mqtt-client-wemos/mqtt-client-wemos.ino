@@ -40,6 +40,8 @@ PubSubClient mqttClient(espClient);
 unsigned long previousMillis = 0;
 const long interval = 5000;  // Kirim data setiap 5 detik
 
+unsigned long t_start;
+
 // Variabel Status MQTT ("IDLE", "CONNECTING", "OK", "ERR")
 String mqttStatus = "IDLE";
 
@@ -48,37 +50,33 @@ bool globalAdaGerakan = false;
 int globalMq135Raw = 0;
 float globalPPM = 0.0;
 
+// Variabel untuk Latency dan Throughput
+unsigned long lastLatencyMs = 0;
+float lastThroughputBps = 0.0; // Dalam Bytes per second (B/s)
+
+// Variabel manajemen pergantian halaman OLED
+int currentPage = 0; // 0 = Halaman Sensor, 1 = Halaman Metrik
+unsigned long lastPageSwitchMillis = 0;
+const long pageSwitchInterval = 2000; // Berganti setiap 2 detik
+
 // Fungsi untuk mengonversi nilai Raw ADC ke PPM (Estimasi CO2)
 float hitungPPM(int rawADC) {
-  // Mencegah nilai 0 agar tidak terjadi devide by zero
   if (rawADC <= 0) rawADC = 1;
 
-  // 1. Konversi ADC ke Tegangan (ESP8266 Max 3.3V)
   float voltase = rawADC * (3.3 / 1023.0);
-
-  // 2. Hitung Resistansi Sensor (Rs)
-  // Catatan: Jika modul MQ135 menggunakan beban Resistor RL = 10k Ohm
   float RS_gas = (3.3 - voltase) / voltase;
-
-  // 3. Nilai R0 standar udara bersih (sekitar 3.6 - 4.0 untuk MQ-135)
   float R0 = 3.6;
-
-  // 4. Hitung Ratio Rs/R0
   float ratio = RS_gas / R0;
-
-  // 5. Hitung PPM CO2 menggunakan rumus kurva logaritmik MQ-135
-  // Rumus: PPM = 110.47 * (ratio ^ -2.862)
   float ppm = 110.47 * pow(ratio, -2.862);
 
-  // Batasi rentang bacaan ideal sensor MQ-135 (400 - 2000 PPM)
   if (ppm < 400.0) ppm = 400.0;
   if (ppm > 9999.0) ppm = 9999.0;
 
   return ppm;
 }
 
-// Fungsi Tampilan OLED Terintegrasi PPM
-void updateOLEDDisplay() {
+// Fungsi menggambar Halaman 1: Sensor & Status MQTT (Tampilan Asli)
+void drawPageSensor() {
   display.clearDisplay();
 
   // Header
@@ -98,18 +96,7 @@ void updateOLEDDisplay() {
   display.print((int)globalPPM);  // Menampilkan angka PPM
   display.println(" PPM");
 
-  // // 3. Kategori / Indikator Udara (Posisi Y = 42)
-  // display.setCursor(0, 42);
-  // display.print("Status  : ");
-  // if (globalPPM < 800) {
-  //   display.println("BAIK");
-  // } else if (globalPPM < 1200) {
-  //   display.println("SEDANG");
-  // } else {
-  //   display.println("BURUK");
-  // }
-
-  // 4. Indikator Status MQTT (Pojok Kanan Bawah: X=96, Y=54)
+  // 3. Indikator Status MQTT (Pojok Kanan Bawah: X=96, Y=54)
   display.setCursor(96, 54);
   if (mqttStatus == "CONNECTING") {
     display.print("[..]");
@@ -122,6 +109,67 @@ void updateOLEDDisplay() {
   }
 
   display.display();
+}
+
+// Fungsi menggambar Halaman 2: Latency & Throughput Terakhir
+void drawPageMetrics() {
+  display.clearDisplay();
+
+  // Header
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("-- NETWORK METRICS --");
+
+  // Display Latency
+  display.setCursor(0, 16);
+  display.setTextSize(1);
+  display.println("Latency (Publish):");
+  display.setTextSize(2);
+  display.setCursor(0, 26);
+  display.print(lastLatencyMs);
+  display.setTextSize(1);
+  display.print(" ms");
+
+  // Display Throughput
+  display.setCursor(0, 44);
+  display.setTextSize(1);
+  display.println("Throughput:");
+  display.setCursor(0, 54);
+  display.setTextSize(1);
+  
+  // Format tampilan throughput (B/s atau KB/s)
+  if (lastThroughputBps >= 1024.0) {
+    display.print(lastThroughputBps / 1024.0, 2);
+    display.print(" KB/s");
+  } else {
+    display.print(lastThroughputBps, 1);
+    display.print(" B/s");
+  }
+
+  display.display();
+}
+
+// Handler pergerakan tampilan OLED bergantian (2 detik sekali)
+void handleOLEDManager() {
+  if (millis() - lastPageSwitchMillis >= pageSwitchInterval) {
+    lastPageSwitchMillis = millis();
+    currentPage = (currentPage + 1) % 2; // Switch antara 0 dan 1
+    
+    if (currentPage == 0) {
+      drawPageSensor();
+    } else {
+      drawPageMetrics();
+    }
+  }
+}
+
+// Wrapper update layar sesuai halaman aktif saat ini
+void updateOLEDDisplay() {
+  if (currentPage == 0) {
+    drawPageSensor();
+  } else {
+    drawPageMetrics();
+  }
 }
 
 // Fungsi untuk mencari IP Raspberry Pi via mDNS
@@ -270,7 +318,6 @@ void setup() {
   display.println("\nIP: 192.168.4.1");
   display.display();
 
-  // Membuka Access Point "ESP-MQTT" jika belum tersambung
   if (!wifiManager.autoConnect("ESP-MQTT")) {
     Serial.println("Gagal terhubung ke Wi-Fi dan waktu timeout habis.");
     display.clearDisplay();
@@ -320,6 +367,9 @@ void loop() {
   }
   mqttClient.loop();
 
+  // Pengelola pergantian tampilan OLED bergantian setiap 2 detik
+  handleOLEDManager();
+
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= interval) {
     previousMillis = currentMillis;
@@ -331,18 +381,42 @@ void loop() {
     globalAdaGerakan = (pirState == HIGH);
 
     // --- Hitung Nilai PPM dari ADC Raw ---
-    globalPPM = mq135Raw;
-
-    // Update Tampilan OLED
-    updateOLEDDisplay();
+    globalPPM = mq135Raw; // Jika ingin memakai estimasi PPM nyata, ganti dengan: hitungPPM(mq135Raw);
 
     // Prepare Publish Payloads
+    String pirTopic = "node/pir";
+    String mqTopic = "node/mq135";
     String pirPayload = globalAdaGerakan ? "true" : "false";
     String mqPayload = String(globalPPM, 1);  // Kirim presisi 1 desimal
 
+    // --- Hitung Latency & Throughput MQTT ---
+    t_start = millis();
+
     // Kirim Data MQTT
-    bool pub1 = mqttClient.publish("node/pir", pirPayload.c_str());
-    bool pub2 = mqttClient.publish("node/mq135", mqPayload.c_str());
+    bool pub1 = mqttClient.publish(pirTopic.c_str(), pirPayload.c_str());
+    bool pub2 = mqttClient.publish(mqTopic.c_str(), mqPayload.c_str());
+
+    unsigned long latency_mqtt = millis() - t_start;
+    
+    // Mencegah nilai 0 ms agar tidak terjadi pembagian dengan nol
+    if (latency_mqtt == 0) latency_mqtt = 1; 
+    lastLatencyMs = latency_mqtt;
+
+    // Hitung estimasi total Byte yang ditransfer (Fixed Header + Topic Length + Payload Length)
+    // Standar MQTT Packet Overhead ~2-5 Byte per paket (diambil estimasi 4 Byte)
+    size_t totalBytesTransferred = (4 + pirTopic.length() + pirPayload.length()) + 
+                                   (4 + mqTopic.length() + mqPayload.length());
+
+    // Hitung throughput (Byte per detik)
+    lastThroughputBps = ((float)totalBytesTransferred / (float)latency_mqtt) * 1000.0;
+
+    Serial.print("[LATENCY MQTT Local] Send Time: ");
+    Serial.print(lastLatencyMs);
+    Serial.println(" ms");
+
+    Serial.print("[THROUGHPUT MQTT] ");
+    Serial.print(lastThroughputBps, 2);
+    Serial.println(" B/s");
 
     // Evaluasi status pengiriman
     if (pub1 && pub2) {
