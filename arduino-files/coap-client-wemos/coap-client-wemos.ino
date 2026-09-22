@@ -31,6 +31,8 @@ const char* targetHostname = "mksrobotics";
 IPAddress ipGateway(0, 0, 0, 0); // Akan diisi otomatis oleh mDNS
 const int portCoap = 5683;
 
+unsigned long t_start = 0;
+
 // Config DHT11 (Pin D4 / GPIO2)
 #define DHTPIN D4     
 #define DHTTYPE DHT11
@@ -47,12 +49,21 @@ const long interval = 5000; // Kirim data setiap 5 detik
 // "IDLE" = Belum kirim, "SEND" = Mengirim, "ACK" = Diterima/Sukses, "ERR" = Gagal
 String coapStatus = "IDLE"; 
 
-// Variabel data sensor global untuk update layar saat ACK diterima
+// Variabel data sensor global untuk update layar
 float globalTemp = 0.0;
 float globalHum = 0.0;
 
-// Fungsi menggambar layar OLED utama beserta ikon indikator di pojok kanan bawah
-void updateOLEDDisplay() {
+// Variabel untuk Latency dan Throughput
+unsigned long lastLatencyMs = 0;
+float lastThroughputBps = 0.0; // Dalam Bytes per second (B/s) atau bps (bits/s)
+
+// Variabel manajemen pergantian halaman OLED
+int currentPage = 0; // 0 = Halaman Sensor, 1 = Halaman Metrik
+unsigned long lastPageSwitchMillis = 0;
+const long pageSwitchInterval = 2000; // Berganti setiap 2 detik
+
+// Fungsi menggambar Halaman 1: Sensor & Status CoAP (Tampilan Asli)
+void drawPageSensor() {
   display.clearDisplay();
   
   // Header
@@ -60,7 +71,7 @@ void updateOLEDDisplay() {
   display.setCursor(0, 0);
   display.println("--- SENSOR COAP ---");
   
-  // Data Suhu (Dinaikkan ke Y=14 dan posisi rapat kiri)
+  // Data Suhu (Y=14)
   display.setTextSize(2);
   display.setCursor(0, 14);
   display.print("T:");
@@ -68,7 +79,7 @@ void updateOLEDDisplay() {
   display.setTextSize(1);
   display.print(" C");
 
-  // Data Kelembapan (Dinaikkan ke Y=36 dan posisi rapat kiri)
+  // Data Kelembapan (Y=36)
   display.setTextSize(2);
   display.setCursor(0, 36);
   display.print("H:");
@@ -76,7 +87,7 @@ void updateOLEDDisplay() {
   display.setTextSize(1);
   display.print(" %");
 
-  // INDIKATOR STATUS COAP (Diatur di Pojok Kanan Bawah: X=96, Y=54)
+  // INDIKATOR STATUS COAP (Pojok Kanan Bawah: X=96, Y=54)
   display.setTextSize(1);
   display.setCursor(96, 54);
 
@@ -93,11 +104,92 @@ void updateOLEDDisplay() {
   display.display();
 }
 
+// Fungsi menggambar Halaman 2: Latency & Throughput Terakhir
+void drawPageMetrics() {
+  display.clearDisplay();
+
+  // Header
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("-- NETWORK METRICS --");
+
+  // Display Latency
+  display.setCursor(0, 16);
+  display.setTextSize(1);
+  display.println("Latency (RTT):");
+  display.setTextSize(2);
+  display.setCursor(0, 26);
+  display.print(lastLatencyMs);
+  display.setTextSize(1);
+  display.print(" ms");
+
+  // Display Throughput
+  display.setCursor(0, 44);
+  display.setTextSize(1);
+  display.println("Throughput:");
+  display.setCursor(0, 54);
+  display.setTextSize(1);
+  
+  // Format tampilan throughput (B/s atau KB/s)
+  if (lastThroughputBps >= 1024.0) {
+    display.print(lastThroughputBps / 1024.0, 2);
+    display.print(" KB/s");
+  } else {
+    display.print(lastThroughputBps, 1);
+    display.print(" B/s");
+  }
+
+  display.display();
+}
+
+// Handler pergerakan tampilan OLED bergantian
+void handleOLEDManager() {
+  // Hanya jalankan switch tampilan otomatis jika tidak dalam status Error DHT
+  if (millis() - lastPageSwitchMillis >= pageSwitchInterval) {
+    lastPageSwitchMillis = millis();
+    currentPage = (currentPage + 1) % 2; // Toggle antara 0 dan 1
+    
+    if (currentPage == 0) {
+      drawPageSensor();
+    } else {
+      drawPageMetrics();
+    }
+  }
+}
+
 // Callback ketika ACK/Response diterima dari Raspberry Pi Gateway
 void callbackResponse(CoapPacket &packet, IPAddress ip, int port) {
+  unsigned long latency_coap = millis() - t_start;
+  lastLatencyMs = latency_coap;
+
+  // Hitung total payload yang ditransfer (Payload Request + ACK CoAP header)
+  // Header dasar CoAP ~4 Byte + panjang payload response (jika ada)
+  size_t totalBytesTransferred = packet.payloadlen + 4;
+
+  // Hitung throughput dalam Bytes/detik
+  if (latency_coap > 0) {
+    lastThroughputBps = ((float)totalBytesTransferred / (float)latency_coap) * 1000.0;
+  } else {
+    lastThroughputBps = 0.0;
+  }
+
+  Serial.print("[LATENCY CoAP] RTT: ");
+  Serial.print(lastLatencyMs);
+  Serial.println(" ms");
+
+  Serial.print("[THROUGHPUT CoAP] ");
+  Serial.print(lastThroughputBps, 2);
+  Serial.println(" B/s");
+
   Serial.println("[CoAP ACK] Response/ACK diterima dari Gateway!");
   coapStatus = "ACK";
-  updateOLEDDisplay(); // Segera perbarui OLED menjadi [OK]
+
+  // Perbarui tampilan jika saat ini berada di halaman sensor
+  if (currentPage == 0) {
+    drawPageSensor();
+  } else {
+    drawPageMetrics();
+  }
 }
 
 // Fungsi untuk mencari IP Raspberry Pi via mDNS
@@ -264,6 +356,9 @@ void loop() {
 
   coap.loop();
 
+  // Atur pergantian layar otomatis setiap 2 detik
+  handleOLEDManager();
+
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= interval) {
     previousMillis = currentMillis;
@@ -288,7 +383,12 @@ void loop() {
 
     // Set status sedang mengirim
     coapStatus = "SEND";
-    updateOLEDDisplay();
+
+    if (currentPage == 0) {
+      drawPageSensor();
+    } else {
+      drawPageMetrics();
+    }
 
     // Format Payload JSON
     String payload = "{\"suhu\":" + String(temp, 1) + ",\"kelembapan\":" + String(hum, 1) + "}";
@@ -297,6 +397,8 @@ void loop() {
     Serial.print(ipGateway);
     Serial.print(": ");
     Serial.println(payload);
+
+    t_start = millis(); // Catat waktu sebelum kirim
 
     // Kirim CoAP POST
     int msgId = coap.send(
@@ -317,7 +419,11 @@ void loop() {
     // Jika gagal mengirim (msgId <= 0), langsung tampilkan status error
     if (msgId <= 0) {
       coapStatus = "ERR";
-      updateOLEDDisplay();
+      if (currentPage == 0) {
+        drawPageSensor();
+      } else {
+        drawPageMetrics();
+      }
     }
   }
 }
