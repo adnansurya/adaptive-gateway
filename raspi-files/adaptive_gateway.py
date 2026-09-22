@@ -7,7 +7,7 @@ import socket
 import urllib.parse
 import urllib.request
 import random
-import subprocess  
+import subprocess   
 import aiocoap.resource as resource
 import aiocoap
 import paho.mqtt.client as mqtt
@@ -20,7 +20,7 @@ logging.getLogger("coap-server").setLevel(logging.WARNING)
 TELEGRAM_BOT_TOKEN = "8027503464:AAEtNkIbhf4saWoOzUD8irC8ug1hBy0ho-Y"
 TELEGRAM_CHAT_ID = "8054572628"
 
-# Variable pelacak status koneksi Cloud (mencegah pesan spam jika disconnect berulang)
+# Variable pelacak status koneksi Cloud
 is_cloud_connected = False
 
 # ==================== KONFIGURASI MQTT BROKER UTAMA (CLOUD) ====================
@@ -36,7 +36,7 @@ MQTT_SRC_BROKER = "localhost"
 MQTT_SRC_PORT = 1883
 MQTT_SRC_TOPICS = [("node/pir", 0), ("node/mq135", 0)]
 
-# --- FUNGSI MENDAPATKAN IP & SSID WARRINGAN ---
+# --- FUNGSI MENDAPATKAN IP & SSID JARINGAN ---
 def get_wlan_ip():
     """Mengambil IP address aktif dari interface jaringan/wlan yang terhubung."""
     try:
@@ -52,7 +52,6 @@ def get_wlan_ip():
 def get_wifi_ssid():
     """Mengambil nama SSID Wi-Fi tempat Raspberry Pi sedang terhubung."""
     try:
-        # Coba cara 1: Menggunakan iwgetid (Paling cepat di Raspberry Pi OS)
         result = subprocess.check_output(["iwgetid", "-r"], stderr=subprocess.DEVNULL)
         ssid = result.decode("utf-8").strip()
         if ssid:
@@ -61,7 +60,6 @@ def get_wifi_ssid():
         pass
 
     try:
-        # Coba cara 2: Menggunakan nmcli (NetworkManager)
         result = subprocess.check_output(
             ["nmcli", "-t", "-f", "active,ssid", "dev", "wifi"], 
             stderr=subprocess.DEVNULL
@@ -99,6 +97,64 @@ async def send_telegram_notification(message):
     await asyncio.to_thread(send_telegram_sync, message)
 
 
+# ==================== KELAS DATASTORE & PENGUKUR METRIK ====================
+class PerformanceTracker:
+    def __init__(self):
+        # Inbound Metrics
+        self.total_bytes_inbound = 0
+        self.inbound_packet_count = 0
+        
+        # Outbound Metrics
+        self.total_bytes_outbound = 0
+        self.outbound_packet_count = 0
+        
+        # Latency Tracker Dict: {mid: send_time_ms}
+        self.pending_publishes = {}
+        self.latest_latency_ms = 0.0
+        self.latency_history = [] # Menyimpan riwayat latensi
+
+        self.start_time = time.time()
+
+    def record_inbound(self, byte_size):
+        self.total_bytes_inbound += byte_size
+        self.inbound_packet_count += 1
+
+    def record_outbound_start(self, mid, byte_size):
+        self.total_bytes_outbound += byte_size
+        self.outbound_packet_count += 1
+        # Catat timestamp waktu kirim dalam ms
+        self.pending_publishes[mid] = time.time() * 1000
+
+    def record_outbound_ack(self, mid):
+        if mid in self.pending_publishes:
+            send_time = self.pending_publishes.pop(mid)
+            ack_time = time.time() * 1000
+            self.latest_latency_ms = ack_time - send_time
+            self.latency_history.append(self.latest_latency_ms)
+            # Jaga panjang riwayat max 50 data
+            if len(self.latency_history) > 50:
+                self.latency_history.pop(0)
+            return self.latest_latency_ms
+        return None
+
+    def get_throughput(self):
+        elapsed = time.time() - self.start_time
+        if elapsed <= 0:
+            return 0.0, 0.0
+        
+        in_bps = self.total_bytes_inbound / elapsed
+        out_bps = self.total_bytes_outbound / elapsed
+        return in_bps, out_bps
+
+    def get_avg_latency(self):
+        if not self.latency_history:
+            return 0.0
+        return sum(self.latency_history) / len(self.latency_history)
+
+
+perf_tracker = PerformanceTracker()
+
+
 class DataStore:
     def __init__(self):
         self.suhu = 0.0
@@ -106,13 +162,15 @@ class DataStore:
         self.gerakan = False
         self.mq135_ppm = 0
 
-    def update_coap_dht(self, data):
+    def update_coap_dht(self, data, raw_bytes_len):
         self.suhu = data.get("suhu", self.suhu)
         self.kelembapan = data.get("kelembapan", self.kelembapan)
-        print(f"[CoAP IN] Suhu: {self.suhu}°C | Kelembapan: {self.kelembapan}%")
+        perf_tracker.record_inbound(raw_bytes_len)
+        print(f"[CoAP IN] Suhu: {self.suhu}°C | Kelembapan: {self.kelembapan}% ({raw_bytes_len} Bytes)")
 
-    def update_mqtt_node(self, topic, payload_str):
+    def update_mqtt_node(self, topic, payload_str, raw_bytes_len):
         try:
+            perf_tracker.record_inbound(raw_bytes_len)
             try:
                 data = json.loads(payload_str)
             except json.JSONDecodeError:
@@ -123,14 +181,14 @@ class DataStore:
                     self.gerakan = bool(data.get("gerakan", False))
                 else:
                     self.gerakan = str(data).lower() in ["true", "1", "motion", "ada"]
-                print(f"[MQTT IN] Sensor PIR (Gerakan): {self.gerakan}")
+                print(f"[MQTT IN] Sensor PIR (Gerakan): {self.gerakan} ({raw_bytes_len} Bytes)")
 
             elif "mq135" in topic:
                 if isinstance(data, dict):
                     self.mq135_ppm = int(data.get("ppm", 0))
                 else:
                     self.mq135_ppm = int(data)
-                print(f"[MQTT IN] Sensor MQ135 (Kualitas Udara): {self.mq135_ppm} PPM")
+                print(f"[MQTT IN] Sensor MQ135 (Kualitas Udara): {self.mq135_ppm} PPM ({raw_bytes_len} Bytes)")
 
         except Exception as e:
             print(f"[MQTT IN Error] Format payload tidak valid: {e}")
@@ -141,7 +199,8 @@ class DataStore:
             "kelembapan": round(self.kelembapan, 1),
             "gerakan": self.gerakan,
             "mq135_ppm": self.mq135_ppm,
-            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "sent_time_ms": int(time.time() * 1000) # Untuk kalkulasi End-to-End Latency
         }
         return json.dumps(payload)
 
@@ -161,11 +220,8 @@ def on_dest_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         print("\n[Cloud MQTT Success] Terhubung KE HIVEMQ CLOUD!\n")
         
-        # Kirim Notifikasi jika sebelumnya dalam posisi disconnected/terputus
         if not is_cloud_connected:
             is_cloud_connected = True
-            
-            # Ambil SSID dan IP terbaru saat koneksi terhubung
             wifi_ssid = get_wifi_ssid()
             ip_wlan = get_wlan_ip()
             
@@ -187,11 +243,8 @@ def on_dest_disconnect(client, userdata, flags, rc, properties=None):
     global is_cloud_connected
     print(f"\n[Cloud MQTT Warning] Terputus dari HiveMQ Cloud! Reason Code: {rc}\n")
     
-    # Kirim Notifikasi jika sebelumnya terhubung lalu terputus
     if is_cloud_connected:
         is_cloud_connected = False
-        
-        # Ambil SSID dan IP saat koneksi terputus
         wifi_ssid = get_wifi_ssid()
         ip_wlan = get_wlan_ip()
         
@@ -206,24 +259,31 @@ def on_dest_disconnect(client, userdata, flags, rc, properties=None):
         )
         send_telegram_sync(msg)
 
+
 def on_dest_publish(client, userdata, mid, reason_code=None, properties=None):
-    print(f"[Cloud MQTT Verifikasi] Data BERHASIL dikirim ke Cloud! (Msg ID: {mid})")
+    latency = perf_tracker.record_outbound_ack(mid)
+    if latency is not None:
+        print(f"[Cloud MQTT Verifikasi] Msg ID: {mid} Terkirim! | Latency (RTT): {latency:.2f} ms")
+    else:
+        print(f"[Cloud MQTT Verifikasi] Msg ID: {mid} Terkirim!")
 
 
 class DHTSensorResource(resource.Resource):
     async def render_post(self, request):
         try:
-            raw_payload = request.payload.decode('utf-8')
+            raw_payload_bytes = request.payload
+            raw_payload = raw_payload_bytes.decode('utf-8')
             json_data = json.loads(raw_payload)
-            store.update_coap_dht(json_data)
+            store.update_coap_dht(json_data, len(raw_payload_bytes))
             return aiocoap.Message(content_format=0, payload=b"ACK")
         except Exception as e:
             return aiocoap.Message(code=aiocoap.BAD_REQUEST, payload=b"Error")
 
 
 def on_local_mqtt_message(client, userdata, msg):
-    payload_str = msg.payload.decode('utf-8')
-    store.update_mqtt_node(msg.topic, payload_str)
+    payload_bytes = msg.payload
+    payload_str = payload_bytes.decode('utf-8')
+    store.update_mqtt_node(msg.topic, payload_str, len(payload_bytes))
 
 
 async def sync_and_publish_loop(interval=10):
@@ -231,13 +291,29 @@ async def sync_and_publish_loop(interval=10):
         await asyncio.sleep(interval)
         
         json_payload = store.get_simple_payload()
+        payload_bytes = json_payload.encode('utf-8')
+        payload_size = len(payload_bytes)
+
+        # Publikasi ke Cloud
+        info = mqtt_pub_client.publish(MQTT_DEST_TOPIC, json_payload, qos=1)
         
+        # Catat Outbound di Performance Tracker
+        perf_tracker.record_outbound_start(info.mid, payload_size)
+
+        # Hitung Metrik Throughput & Latensi
+        in_bps, out_bps = perf_tracker.get_throughput()
+        avg_lat = perf_tracker.get_avg_latency()
+
         print("\n================ [ADAPTIVE GATEWAY AGGREGATION] ================")
-        print(f"Mengirim Ke Topic Cloud [{MQTT_DEST_TOPIC}]:")
+        print(f"Mengirim Ke Topic Cloud [{MQTT_DEST_TOPIC}] ({payload_size} Bytes):")
         print(json_payload)
+        print("----------------------------------------------------------------")
+        print(f"📊 METRIK PERFORMA GATEWAY:")
+        print(f"   • Throughput Inbound  : {in_bps:.2f} Bytes/s ({in_bps/1024:.4f} KB/s)")
+        print(f"   • Throughput Outbound : {out_bps:.2f} Bytes/s ({out_bps/1024:.4f} KB/s)")
+        print(f"   • Rata-rata Latensi   : {avg_lat:.2f} ms")
         print("================================================================\n")
 
-        info = mqtt_pub_client.publish(MQTT_DEST_TOPIC, json_payload, qos=1)
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
             print(f"[Cloud MQTT Warning] Belum terhubung ke Cloud (Code: {info.rc})")
 
@@ -290,15 +366,15 @@ async def main():
     # 4. Kirim Notifikasi Telegram (Gateway Startup)
     hostname = socket.gethostname()
     ip_wlan = get_wlan_ip()
-    wifi_ssid = get_wifi_ssid()  # <--- Ambil SSID Wi-Fi aktif
+    wifi_ssid = get_wifi_ssid()
 
     pesan_telegram = (
         f"🚀 *ADAPTIVE GATEWAY ONLINE*\n"
         f"----------------------------------------\n"
         f"• *Device:* `{hostname}`\n"
-        f"• *SSID Wi-Fi:* `{wifi_ssid}`\n"  # <--- Menampilkan SSID
+        f"• *SSID Wi-Fi:* `{wifi_ssid}`\n"
         f"• *IP WLAN / Local:* `{ip_wlan}`\n"
-        f"• *Status:* Service Aktif & Berjalan\n"
+        f"• *Status:* Service Aktif & Profiling Metrik Ready\n"
         f"• *Waktu:* `{time.strftime('%Y-%m-%d %H:%M:%S')}`\n"
         f"----------------------------------------\n"
         f" Gateway siap memproses data CoAP & MQTT."
