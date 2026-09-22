@@ -1,0 +1,314 @@
+[CoAP IN] Suhu: 26.7°C | Kelembapan: 51.3% (31 Bytes)
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.7, "kelembapan": 51.3, "gerakan": false, "mq135_ppm": 18, "timestamp                                                                                        ": "2026-09-22 23:00:40", "sent_time_ms": 1790092840278}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 6.50 Bytes/s (0.0064 KB/s)
+   • Throughput Outbound : 13.28 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 275.10 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 77 Terkirim! | Latency (RTT): 315.15 ms
+
+
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.6, "kelembapan": 51.3, "gerakan": false, "mq135_ppm": 18, "timestamp                                                                                        ": "2026-09-22 23:00:50", "sent_time_ms": 1790092850282}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 6.50 Bytes/s (0.0063 KB/s)
+   • Throughput Outbound : 13.28 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 276.88 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 78 Terkirim! | Latency (RTT): 232.36 ms
+
+
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.6, "kelembapan": 51.3, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:01:00", "sent_time_ms": 1790092860287}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 6.50 Bytes/s (0.0063 KB/s)
+   • Throughput Outbound : 13.29 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 275.37 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 79 Terkirim! | Latency (RTT): 404.64 ms
+
+
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+[CoAP IN] Suhu: 26.7°C | Kelembapan: 51.4% (31 Bytes)
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.7, "kelembapan": 51.4, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:01:10", "sent_time_ms": 1790092870290}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 6.49 Bytes/s (0.0063 KB/s)
+   • Throughput Outbound : 13.29 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 278.87 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 80 Terkirim! | Latency (RTT): 228.28 ms
+
+
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.7, "kelembapan": 51.4, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:01:20", "sent_time_ms": 1790092880296}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 6.41 Bytes/s (0.0063 KB/s)
+   • Throughput Outbound : 13.29 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 278.82 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 81 Terkirim! | Latency (RTT): 219.39 ms
+
+
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.7, "kelembapan": 51.4, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:01:30", "sent_time_ms": 1790092890301}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 6.34 Bytes/s (0.0062 KB/s)
+   • Throughput Outbound : 13.30 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 278.61 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 82 Terkirim! | Latency (RTT): 223.61 ms
+
+
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.7, "kelembapan": 51.4, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:01:40", "sent_time_ms": 1790092900308}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 6.26 Bytes/s (0.0061 KB/s)
+   • Throughput Outbound : 13.30 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 278.42 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 83 Terkirim! | Latency (RTT): 230.41 ms
+
+
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.7, "kelembapan": 51.4, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:01:50", "sent_time_ms": 1790092910312}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 6.19 Bytes/s (0.0060 KB/s)
+   • Throughput Outbound : 13.30 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 278.50 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 84 Terkirim! | Latency (RTT): 320.88 ms
+
+
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.7, "kelembapan": 51.4, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:02:00", "sent_time_ms": 1790092920318}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 6.12 Bytes/s (0.0060 KB/s)
+   • Throughput Outbound : 13.31 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 279.13 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 85 Terkirim! | Latency (RTT): 223.33 ms
+
+
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.7, "kelembapan": 51.4, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:02:10", "sent_time_ms": 1790092930323}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 6.05 Bytes/s (0.0059 KB/s)
+   • Throughput Outbound : 13.31 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 279.08 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 86 Terkirim! | Latency (RTT): 246.47 ms
+
+
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.7, "kelembapan": 51.4, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:02:20", "sent_time_ms": 1790092940328}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 5.98 Bytes/s (0.0058 KB/s)
+   • Throughput Outbound : 13.31 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 279.51 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 87 Terkirim! | Latency (RTT): 438.63 ms
+
+
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.7, "kelembapan": 51.4, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:02:30", "sent_time_ms": 1790092950333}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 5.91 Bytes/s (0.0058 KB/s)
+   • Throughput Outbound : 13.32 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 282.57 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 88 Terkirim! | Latency (RTT): 234.94 ms
+
+
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.7, "kelembapan": 51.4, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:02:40", "sent_time_ms": 1790092960341}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 5.85 Bytes/s (0.0057 KB/s)
+   • Throughput Outbound : 13.32 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 282.61 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 89 Terkirim! | Latency (RTT): 236.47 ms
+
+
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.7, "kelembapan": 51.4, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:02:50", "sent_time_ms": 1790092970346}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 5.78 Bytes/s (0.0056 KB/s)
+   • Throughput Outbound : 13.32 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 278.28 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 90 Terkirim! | Latency (RTT): 222.38 ms
+
+
+
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.6, "kelembapan": 51.3, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:03:00", "sent_time_ms": 1790092980351}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 5.76 Bytes/s (0.0056 KB/s)
+   • Throughput Outbound : 13.33 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 277.36 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 91 Terkirim! | Latency (RTT): 223.49 ms
+
+
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.6, "kelembapan": 51.3, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:03:10", "sent_time_ms": 1790092990357}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 5.76 Bytes/s (0.0056 KB/s)
+   • Throughput Outbound : 13.33 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 277.35 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 92 Terkirim! | Latency (RTT): 242.48 ms
+
+
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.6, "kelembapan": 51.3, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:03:20", "sent_time_ms": 1790093000362}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 5.77 Bytes/s (0.0056 KB/s)
+   • Throughput Outbound : 13.33 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 277.27 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 93 Terkirim! | Latency (RTT): 283.53 ms
+
+
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.6, "kelembapan": 51.3, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:03:30", "sent_time_ms": 1790093010367}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 5.77 Bytes/s (0.0056 KB/s)
+   • Throughput Outbound : 13.33 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 275.70 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 94 Terkirim! | Latency (RTT): 246.69 ms
+
+
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.6, "kelembapan": 51.3, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:03:40", "sent_time_ms": 1790093020375}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 5.77 Bytes/s (0.0056 KB/s)
+   • Throughput Outbound : 13.34 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 276.08 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 95 Terkirim! | Latency (RTT): 290.88 ms
+
+
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.6, "kelembapan": 51.3, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:03:50", "sent_time_ms": 1790093030378}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 5.78 Bytes/s (0.0056 KB/s)
+   • Throughput Outbound : 13.34 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 276.26 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 96 Terkirim! | Latency (RTT): 241.82 ms
+
+
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.6, "kelembapan": 51.3, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:04:00", "sent_time_ms": 1790093040387}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 5.78 Bytes/s (0.0056 KB/s)
+   • Throughput Outbound : 13.34 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 276.61 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 97 Terkirim! | Latency (RTT): 344.63 ms
+
+
+[CoAP IN] Suhu: 26.5°C | Kelembapan: 51.3% (31 Bytes)
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.6, "kelembapan": 51.3, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:04:10", "sent_time_ms": 1790093050394}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 5.79 Bytes/s (0.0057 KB/s)
+   • Throughput Outbound : 13.34 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 273.68 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 98 Terkirim! | Latency (RTT): 259.38 ms
+
+
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.3% (31 Bytes)
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.6, "kelembapan": 51.3, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:04:20", "sent_time_ms": 1790093060400}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 5.79 Bytes/s (0.0057 KB/s)
+   • Throughput Outbound : 13.35 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 274.33 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 99 Terkirim! | Latency (RTT): 243.07 ms
+
+
+[CoAP IN] Suhu: 26.5°C | Kelembapan: 51.3% (31 Bytes)
+[CoAP IN] Suhu: 26.6°C | Kelembapan: 51.2% (31 Bytes)
+================ [ADAPTIVE GATEWAY AGGREGATION] ================
+Mengirim Ke Topic Cloud [gateway/all_data] (136 Bytes):
+{"suhu": 26.6, "kelembapan": 51.2, "gerakan": false, "mq135_ppm": 18, "timestamp": "2026-09-22 23:04:30", "sent_time_ms": 1790093070406}
+----------------------------------------------------------------
+📊 METRIK PERFORMA GATEWAY:
+   • Throughput Inbound  : 5.79 Bytes/s (0.0057 KB/s)
+   • Throughput Outbound : 13.35 Bytes/s (0.0130 KB/s)
+   • Rata-rata Latensi   : 273.90 ms
+================================================================
+[Cloud MQTT Verifikasi] Msg ID: 100 Terkirim! | Latency (RTT): 309.05 ms
+[CoAP IN] Suhu: 26.5°C | Kelembapan: 51.3% (31 Bytes)
